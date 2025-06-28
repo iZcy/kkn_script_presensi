@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import re
 
+from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
@@ -19,78 +20,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from PIL import Image
 import pytesseract
 import io
-
-import concurrent.futures
-
-def check_single_student(student, session_cookies, base_url):
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait, Select
-    from selenium.webdriver.support import expected_conditions as EC
-    from bs4 import BeautifulSoup
-    from datetime import date
-
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(options=options)
-
-    try:
-        driver.get(f"{base_url}/kkn/presensi/unit")
-        for cookie in session_cookies:
-            driver.add_cookie(cookie)
-        driver.get(f"{base_url}/kkn/presensi/unit")
-
-        wait = WebDriverWait(driver, 10)
-        select_element = wait.until(EC.presence_of_element_located((By.NAME, "mhsPeriodeId")))
-        select = Select(select_element)
-
-        matched_value = None
-        for option in select.options:
-            if student['name'].lower() in option.text.lower():
-                matched_value = option.get_attribute("value")
-                break
-
-        if not matched_value:
-            return {**student, 'date': date.today().strftime('%Y-%m-%d'), 'status': 'unknown', 'time': None}
-
-        select.select_by_value(matched_value)
-        wait.until(lambda d: "form-loading" not in d.find_element(By.ID, "form-presensi-unit").get_attribute("class"))
-
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        today = date.today().strftime('%Y-%m-%d')
-        today_cell = soup.find('td', class_='fc-day-top', attrs={'data-date': today}) \
-                     or soup.find('td', class_='fc-day', attrs={'data-date': today})
-        if not today_cell:
-            status = 'absent'
-            time_val = None
-        else:
-            week_row = today_cell.find_parent('tr')
-            today_column_index = list(week_row.find_all('td')).index(today_cell)
-            fc_row = today_cell.find_parent('div', class_='fc-row')
-            event_cell = fc_row.find_all('div', class_='fc-bgevent-skeleton')[0].find_all('td')[today_column_index]
-            style = event_cell.get('style', '')
-            text = event_cell.get_text().strip()
-            if 'rgb(120, 189, 93)' in style:
-                status = 'present'
-                time_val = text
-            elif 'rgb(228, 96, 80)' in style:
-                status = 'absent'
-                time_val = None
-            elif 'rgb(244, 171, 67)' in style:
-                status = 'pending'
-                time_val = text
-            else:
-                status = 'absent'
-                time_val = None
-
-        return {**student, 'date': date.today().strftime('%Y-%m-%d'), 'status': status, 'time': time_val}
-
-    except Exception:
-        return {**student, 'date': date.today().strftime('%Y-%m-%d'), 'status': 'error', 'time': None}
-    finally:
-        driver.quit()
 
 class UGMAttendanceChecker:
     def __init__(self):
@@ -298,28 +227,38 @@ class UGMAttendanceChecker:
         initial_page = self.get_attendance_page()
         students = self.parse_student_list(initial_page)
 
-        cookies = [
-            {
-                'name': c.name,
-                'value': c.value,
-                'domain': c.domain,
-                'path': c.path
-            } for c in self.session.cookies if "simaster.ugm.ac.id" in c.domain
-        ]
-
         results = []
-        with concurrent.futures.ProcessPoolExecutor(max_workers=3) as executor:
-            futures = [
-                executor.submit(check_single_student, student, cookies, self.base_url)
-                for student in students
-            ]
-            for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
-                result = future.result()
+        today_str = date.today().strftime('%Y-%m-%d')
+        
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        driver = webdriver.Chrome(options=options)
+
+        for i, student in enumerate(students, 1):
+            print(f"[{i}/{len(students)}] Checking: {student['name']} ({student['student_id']})")
+            try:
+                attendance = self.get_student_attendance(student['name'], driver)
+                result = {
+                    'name': student['name'],
+                    'student_id': student['student_id'],
+                    'date': today_str,
+                    'status': attendance['status'] if attendance else 'unknown',
+                    'time': attendance['time'] if attendance else None
+                }
+                results.append(result)
                 status = result['status']
                 time_str = f" at {result['time']} GMT+07:00" if result['time'] else ''
-                print(f"[{i}/{len(students)}] {result['name']} ({result['student_id']}): {status}{time_str}")
-                results.append(result)
+                print(f"Result: {status}{time_str}")
+            except:
+                results.append({
+                    'name': student['name'],
+                    'student_id': student['student_id'],
+                    'date': today_str,
+                    'status': 'error',
+                    'time': None
+                })
 
+        driver.quit()
         return results
 
     def export_results(self, results, filename=None):
