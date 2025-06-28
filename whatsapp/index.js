@@ -8,6 +8,8 @@ const client = new Client({
   authStrategy: new LocalAuth()
 });
 
+let isChecking = false; // 🔒 Lock flag
+
 client.on("qr", (qr) => {
   qrcode.generate(qr, { small: true });
 });
@@ -18,6 +20,12 @@ client.on("ready", () => {
 
 client.on("message", async (msg) => {
   if (msg.body.toLowerCase().includes("ancis presensi kkn")) {
+    if (isChecking) {
+      msg.reply("⏳ A check is already in progress. Please wait...");
+      return;
+    }
+
+    isChecking = true; // Lock
     msg.reply("⏳ Checking KKN attendance...");
 
     try {
@@ -45,11 +53,10 @@ client.on("message", async (msg) => {
       }
 
       if (present.length > 0) {
-        // Sort by time (earliest first)
         present.sort((a, b) => {
           if (!a.time) return 1;
           if (!b.time) return -1;
-          return a.time.localeCompare(b.time); // time is in string format like "08:45"
+          return a.time.localeCompare(b.time);
         });
 
         reply += `*Present Students:*\n`;
@@ -63,6 +70,8 @@ client.on("message", async (msg) => {
     } catch (err) {
       console.error(err);
       msg.reply("⚠️ Error checking attendance.");
+    } finally {
+      isChecking = false; // 🔓 Unlock
     }
   }
 });
