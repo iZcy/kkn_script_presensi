@@ -30,7 +30,6 @@ Thumbs.db
 
 # Ignore output data (optional)
 *.csv
-*.json
 
 # Ignore NodeJs
 node_modules/
