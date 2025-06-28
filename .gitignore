@@ -1,0 +1,33 @@
+# Ignore Python virtual environments
+.venv/
+venv/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
+# Ignore environment variable files
+.env
+*.env
+
+# Ignore test coverage, logs, etc.
+*.log
+*.sqlite3
+.coverage
+coverage.xml
+*.pid
+
+# Ignore IDE/editor configs
+.vscode/
+.idea/
+
+# Ignore Jupyter and notebook junk
+.ipynb_checkpoints/
+
+# macOS/Windows system files
+.DS_Store
+Thumbs.db
+
+# Ignore output data (optional)
+*.csv
+*.json

@@ -1,0 +1,9 @@
+fastapi
+python-multipart
+uvicorn
+requests
+beautifulsoup4
+pydantic
+selenium
+pillow
+pytesseract
