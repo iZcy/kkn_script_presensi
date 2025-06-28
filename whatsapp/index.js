@@ -21,7 +21,6 @@ client.on("message", async (msg) => {
     msg.reply("⏳ Checking KKN attendance...");
 
     try {
-      // Create the form data
       const form = new FormData();
       form.append("username", process.env.UGM_USERNAME);
       form.append("password", process.env.UGM_PASSWORD);
@@ -36,10 +35,27 @@ client.on("message", async (msg) => {
 
       let reply = `📋 *KKN Attendance Summary* (${data[0].date})\n\n`;
       reply += `✅ Present: ${present.length}\n❌ Absent: ${absent.length}\n\n`;
+
+      if (present.length > 0) {
+        // Sort by time (earliest first)
+        present.sort((a, b) => {
+          if (!a.time) return 1;
+          if (!b.time) return -1;
+          return a.time.localeCompare(b.time); // time is in string format like "08:45"
+        });
+
+        reply += `*Present Students:*\n`;
+        present.forEach((s, i) => {
+          const timeStr = s.time ? ` at ${s.time}` : "";
+          reply += `${i + 1}. ${s.name} (${s.student_id})${timeStr}\n`;
+        });
+        reply += `\n`;
+      }
+
       if (absent.length > 0) {
         reply += `*Absent Students:*\n`;
-        absent.forEach((s) => {
-          reply += `- ${s.name} (${s.student_id})\n`;
+        absent.forEach((s, i) => {
+          reply += `${i + 1}. ${s.name} (${s.student_id})\n`;
         });
       }
 
