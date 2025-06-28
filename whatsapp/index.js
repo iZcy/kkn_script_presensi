@@ -17,7 +17,7 @@ client.on("ready", () => {
 });
 
 client.on("message", async (msg) => {
-  if (msg.body.toLowerCase().includes("check kkn")) {
+  if (msg.body.toLowerCase().includes("presensi kkn")) {
     msg.reply("⏳ Checking KKN attendance...");
 
     try {
