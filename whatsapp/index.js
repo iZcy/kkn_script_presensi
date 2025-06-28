@@ -34,7 +34,15 @@ client.on("message", async (msg) => {
       const present = data.filter((d) => d.status === "present");
 
       let reply = `📋 *KKN Attendance Summary* (${data[0].date})\n\n`;
-      reply += `✅ Present: ${present.length}\n❌ Absent: ${absent.length}\n\n`;
+      reply += `❌ Absent: ${absent.length}\n✅ Present: ${present.length}\n\n`;
+
+      if (absent.length > 0) {
+        reply += `*Absent Students:*\n`;
+        absent.forEach((s, i) => {
+          reply += `${i + 1}. ${s.name} (${s.student_id})\n`;
+        });
+        reply += `\n`;
+      }
 
       if (present.length > 0) {
         // Sort by time (earliest first)
@@ -48,14 +56,6 @@ client.on("message", async (msg) => {
         present.forEach((s, i) => {
           const timeStr = s.time ? ` at ${s.time}` : "";
           reply += `${i + 1}. ${s.name} (${s.student_id})${timeStr}\n`;
-        });
-        reply += `\n`;
-      }
-
-      if (absent.length > 0) {
-        reply += `*Absent Students:*\n`;
-        absent.forEach((s, i) => {
-          reply += `${i + 1}. ${s.name} (${s.student_id})\n`;
         });
       }
 
