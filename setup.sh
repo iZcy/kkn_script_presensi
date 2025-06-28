@@ -18,7 +18,10 @@ USER="${SUDO_USER:-$(whoami)}"
 # === SYSTEM DEPENDENCIES ===
 echo "Installing system dependencies..."
 sudo apt update
-sudo apt install -y tesseract-ocr python3-venv nodejs npm
+sudo apt install -y tesseract-ocr python3-venv
+echo "Installing Node.js (via NodeSource)..."
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
 # === FASTAPI SETUP ===
 if [ ! -d "$FASTAPI_DIR" ]; then
