@@ -59,7 +59,7 @@ client.on("message", async (msg) => {
           return a.time.localeCompare(b.time);
         });
 
-        reply += `*Present Students:*\n`;
+        reply += `*Present Students (GMT+07:00):*\n`;
         present.forEach((s, i) => {
           const timeStr = s.time ? ` at ${s.time}` : "";
           reply += `${i + 1}. ${s.name} (${s.student_id})${timeStr}\n`;
