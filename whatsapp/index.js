@@ -27,6 +27,12 @@ async function askDeepSeek(userMessage) {
           content:
             process.env.DEEPSEEK_CONTEXT || "You are a helpful assistant."
         },
+        // tell the system to not to use any markdown formatting, just use format that whatsapp supports by maintaining the information structure
+        {
+          role: "system",
+          content:
+            "Please respond in plain text without any markdown formatting."
+        },
         {
           role: "user",
           content: userMessage
