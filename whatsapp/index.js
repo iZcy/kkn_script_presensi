@@ -176,8 +176,8 @@ client.on("message", async (msg) => {
     }
   }
   // 🤖 DeepSeek chat functionality
-  else if (msg.body.toLowerCase().startsWith("ask ai: ")) {
-    const userQuestion = msg.body.slice(8).trim(); // Remove "Ask AI: " prefix
+  else if (msg.body.toLowerCase().startsWith("ask ai:")) {
+    const userQuestion = msg.body.slice(7).trim(); // Extract question after "ask ai:"
     if (!userQuestion) {
       msg.reply("❌ Please provide a question for the AI.");
       return;
