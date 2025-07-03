@@ -204,10 +204,10 @@ client.on("message", async (msg) => {
       // Add to queue
       deepSeekQueue.push({ msg, userQuestion });
       const queuePosition = deepSeekQueue.length;
+      msg.reply("🤖 Processing your question...");
 
       // Always show immediate feedback
       if (queuePosition === 1 && !isProcessingDeepSeek) {
-        msg.reply("🤖 Processing your question...");
         processDeepSeekQueue();
       } else if (queuePosition === 1 && isProcessingDeepSeek) {
         msg.reply("🤖 Your question is next in queue, processing soon...");
