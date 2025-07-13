@@ -16,6 +16,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from PIL import Image
 import pytesseract
@@ -152,6 +153,86 @@ class UGMAttendanceChecker:
                     })
         return students
 
+    def navigate_to_current_month(self, driver):
+        """Navigate the calendar to the current month"""
+        today = date.today()
+        current_year = today.year
+        current_month = today.month
+        
+        max_navigation_attempts = 12  # Maximum 12 months to navigate
+        attempt = 0
+        
+        while attempt < max_navigation_attempts:
+            try:
+                # Check current calendar month/year
+                wait = WebDriverWait(driver, 10)
+                calendar_header = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".fc-center h2")))
+                header_text = calendar_header.text.strip()
+                
+                print(f"Current calendar view: {header_text}")
+                
+                # Parse the header to get month and year
+                # Expected format: "June 2025" or "July 2025"
+                month_year_match = re.match(r'(\w+)\s+(\d{4})', header_text)
+                if not month_year_match:
+                    raise Exception(f"Could not parse calendar header: {header_text}")
+                
+                month_name = month_year_match.group(1)
+                display_year = int(month_year_match.group(2))
+                
+                # Convert month name to number
+                month_names = {
+                    'January': 1, 'February': 2, 'March': 3, 'April': 4,
+                    'May': 5, 'June': 6, 'July': 7, 'August': 8,
+                    'September': 9, 'October': 10, 'November': 11, 'December': 12
+                }
+                
+                display_month = month_names.get(month_name)
+                if not display_month:
+                    raise Exception(f"Unknown month name: {month_name}")
+                
+                print(f"Current calendar: {month_name} {display_year} (month {display_month})")
+                print(f"Target: {current_month}/{current_year}")
+                
+                # Check if we're at the correct month/year
+                if display_year == current_year and display_month == current_month:
+                    print("Found current month!")
+                    return True
+                
+                # Determine navigation direction
+                if display_year < current_year or (display_year == current_year and display_month < current_month):
+                    # Need to go forward
+                    next_button = driver.find_element(By.CSS_SELECTOR, ".fc-next-button")
+                    next_button.click()
+                    print("Clicked next button")
+                elif display_year > current_year or (display_year == current_year and display_month > current_month):
+                    # Need to go backward
+                    prev_button = driver.find_element(By.CSS_SELECTOR, ".fc-prev-button")
+                    prev_button.click()
+                    print("Clicked prev button")
+                
+                # Wait for calendar to update
+                time.sleep(2)
+                
+                # Wait for any loading to complete
+                try:
+                    WebDriverWait(driver, 5).until(
+                        lambda d: "form-loading" not in d.find_element(By.ID, "form-presensi-unit").get_attribute("class")
+                    )
+                except:
+                    pass  # Continue if loading check fails
+                
+                attempt += 1
+                
+            except (TimeoutException, NoSuchElementException) as e:
+                print(f"Error during navigation attempt {attempt + 1}: {str(e)}")
+                attempt += 1
+                if attempt >= max_navigation_attempts:
+                    break
+                time.sleep(2)
+        
+        raise Exception(f"Could not navigate to current month after {max_navigation_attempts} attempts")
+
     def get_student_attendance(self, student_name_to_find, driver):
         try:
             driver.get(f"{self.base_url}/kkn/presensi/unit")
@@ -182,29 +263,49 @@ class UGMAttendanceChecker:
 
             select.select_by_value(matched_value)
 
+            # Wait for form to load
             wait.until(lambda d: "form-loading" not in d.find_element(By.ID, "form-presensi-unit").get_attribute("class"))
+            
+            # Navigate to current month
+            print(f"Navigating to current month for student: {student_name_to_find}")
+            self.navigate_to_current_month(driver)
             
             html_after = driver.page_source
 
             return self.parse_attendance_calendar(html_after)
 
-        except:
+        except Exception as e:
+            print(f"Error checking attendance for {student_name_to_find}: {str(e)}")
             return None
 
     def parse_attendance_calendar(self, html_content):
         soup = BeautifulSoup(html_content, 'html.parser')
         today = date.today().strftime('%Y-%m-%d')
+        
+        # Try multiple selectors for finding today's cell
         today_cell = soup.find('td', class_='fc-day-top', attrs={'data-date': today}) \
-                     or soup.find('td', class_='fc-day', attrs={'data-date': today})
+                     or soup.find('td', class_='fc-day', attrs={'data-date': today}) \
+                     or soup.find('td', attrs={'data-date': today})
+        
         if not today_cell:
-            return None
+            print(f"Could not find today's date cell: {today}")
+            return {'status': 'absent', 'time': None}
 
+        # Find the week row containing today
         week_row = today_cell.find_parent('tr')
+        if not week_row:
+            print("Could not find week row")
+            return {'status': 'absent', 'time': None}
+            
         today_column_index = list(week_row.find_all('td')).index(today_cell)
+        
+        # Find the fc-row container
         fc_row = today_cell.find_parent('div', class_='fc-row')
         if not fc_row:
-            return None
+            print("Could not find fc-row container")
+            return {'status': 'absent', 'time': None}
 
+        # Look for background events in this row
         bgevent_skeletons = fc_row.find_all('div', class_='fc-bgevent-skeleton')
         for skeleton in bgevent_skeletons:
             row = skeleton.find('tr')
@@ -215,12 +316,14 @@ class UGMAttendanceChecker:
                     style = event_cell.get('style', '')
                     text = event_cell.get_text().strip()
 
+                    # Check for different status colors
                     if 'rgb(120, 189, 93)' in style:
                         return {'status': 'present', 'time': text}
                     elif 'rgb(228, 96, 80)' in style:
                         return {'status': 'absent', 'time': None}
                     elif 'rgb(244, 171, 67)' in style:
                         return {'status': 'pending', 'time': text}
+        
         return {'status': 'absent', 'time': None}
 
     def check_all_students(self):
@@ -232,33 +335,38 @@ class UGMAttendanceChecker:
         
         options = webdriver.ChromeOptions()
         options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
         driver = webdriver.Chrome(options=options)
 
-        for i, student in enumerate(students, 1):
-            print(f"[{i}/{len(students)}] Checking: {student['name']} ({student['student_id']})")
-            try:
-                attendance = self.get_student_attendance(student['name'], driver)
-                result = {
-                    'name': student['name'],
-                    'student_id': student['student_id'],
-                    'date': today_str,
-                    'status': attendance['status'] if attendance else 'unknown',
-                    'time': attendance['time'] if attendance else None
-                }
-                results.append(result)
-                status = result['status']
-                time_str = f" at {result['time']} GMT+07:00" if result['time'] else ''
-                print(f"Result: {status}{time_str}")
-            except:
-                results.append({
-                    'name': student['name'],
-                    'student_id': student['student_id'],
-                    'date': today_str,
-                    'status': 'error',
-                    'time': None
-                })
-
-        driver.quit()
+        try:
+            for i, student in enumerate(students, 1):
+                print(f"[{i}/{len(students)}] Checking: {student['name']} ({student['student_id']})")
+                try:
+                    attendance = self.get_student_attendance(student['name'], driver)
+                    result = {
+                        'name': student['name'],
+                        'student_id': student['student_id'],
+                        'date': today_str,
+                        'status': attendance['status'] if attendance else 'unknown',
+                        'time': attendance['time'] if attendance else None
+                    }
+                    results.append(result)
+                    status = result['status']
+                    time_str = f" at {result['time']} GMT+07:00" if result['time'] else ''
+                    print(f"Result: {status}{time_str}")
+                except Exception as e:
+                    print(f"Error processing {student['name']}: {str(e)}")
+                    results.append({
+                        'name': student['name'],
+                        'student_id': student['student_id'],
+                        'date': today_str,
+                        'status': 'error',
+                        'time': None
+                    })
+        finally:
+            driver.quit()
+            
         return results
 
     def export_results(self, results, filename=None):
